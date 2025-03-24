@@ -8,6 +8,7 @@ defmodule FlashSyncE.Application do
   @impl true
   def start(_type, _args) do
     children = [
+      {FlashSyncE.Repo}
       # Starts a worker by calling: FlashSyncE.Worker.start_link(arg)
       # {FlashSyncE.Worker, arg}
     ]

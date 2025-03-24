@@ -108,4 +108,11 @@ defmodule FlashSyncE.WebSocket.Handler do
   defp handle_message(%{"type" => unknown_type}, state) do
     {:reply, {:text, Jason.encode!(%{error: "Unknown message type: #{unknown_type}"})}, state}
   end
+
+  # Handle client disconnect
+  @impl true
+  def terminate(_reason, _req, state) do
+    Logger.info("WebSocket connection closed for user #{state.user_id}")
+    :ok
+  end
 end
