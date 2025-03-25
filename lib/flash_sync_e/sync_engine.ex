@@ -1,16 +1,17 @@
 defmodule FlashSyncE.SyncEngine do
-  alias FlashSyncE.Repo
+  require Logger
   alias FlashSyncE.Domain.CardRepository
 
-  # TODO: start transaction -> process one change at a time -> return tuple with successes and errors
   def process_changes(changes, user_id)
       when is_list(changes) and length(changes) > 0 and is_binary(user_id) do
-    Repo.transaction(fn ->
-      nil
-    end)
+    changes |> Enum.map(fn change -> process_change(change, user_id) end)
   end
 
-  def process_changes(_, _), do: raise(ArgumentError, message: "Invalid arguments")
+  def process_changes(changes, user_id) do
+    Logger.debug("process_changes, changes: #{inspect(changes)}")
+    Logger.debug("process_changes, user_id: #{inspect(user_id)}")
+    raise(ArgumentError, message: "Invalid arguments")
+  end
 
   def process_change(%{"action" => "create"} = data, _user_id) do
     card_params = %{
@@ -22,6 +23,23 @@ defmodule FlashSyncE.SyncEngine do
     case CardRepository.create(card_params) do
       {:ok, card} -> {:ok, card}
       {:error, _changeset} -> {:error, card_params}
+    end
+  end
+
+  def process_change(%{"action" => "update"} = data, _user_id) do
+    card_params = %{
+      text: data["text"],
+      translation: data["translation"],
+      examples: data["examples"],
+      version: data["version"],
+      updated_at: data["updated_at"]
+    }
+
+    card = CardRepository.get(data["id"])
+
+    case CardRepository.update(card, card_params) do
+      {:ok, card} -> {:ok, card}
+      {:error, _changeset} -> {:error, "error updating card, #{data["id"]}"}
     end
   end
 

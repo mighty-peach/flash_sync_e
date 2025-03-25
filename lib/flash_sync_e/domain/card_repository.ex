@@ -41,7 +41,9 @@ defmodule FlashSyncE.Domain.CardRepository do
   def update(_card, _invalid), do: raise(ArgumentError, message: "Invalid attributes")
 
   def delete(%CardModel{} = card) when is_map(card) do
-    Repo.delete(card)
+    card
+    |> CardModel.delete_changeset()
+    |> Repo.delete()
   end
 
   def delete(_), do: raise(ArgumentError, message: "Invalid entity to delete")

@@ -20,8 +20,11 @@ defmodule FlashSyncE.Domain.CardModel do
   @optional_fields [:examples, :is_deleted, :last_synced_at]
 
   def changeset(card, attrs) do
+    now = DateTime.utc_now() |> DateTime.to_iso8601()
+
     card
     |> cast(attrs, @required_fields ++ @optional_fields)
+    |> Map.put(:last_synced_at, now)
     |> validate_required(@required_fields)
   end
 
@@ -36,6 +39,10 @@ defmodule FlashSyncE.Domain.CardModel do
 
     %__MODULE__{}
     |> changeset(attrs)
+  end
+
+  def delete_changeset(card) do
+    Map.put(card, :is_deleted, true)
   end
 
   def update_changeset(card, attrs) do

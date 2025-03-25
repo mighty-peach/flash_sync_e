@@ -2,6 +2,7 @@ defmodule FlashSyncE.WebSocket.Handler do
   @behaviour :cowboy_websocket
 
   # FIXME: add broadcast message handling
+  # FIXME: improve error handling, so it won't raise but return an {:error, reason} tuple
 
   require Logger
 
@@ -20,7 +21,7 @@ defmodule FlashSyncE.WebSocket.Handler do
     # Extract query params for authentication
     qs = :cowboy_req.parse_qs(req)
 
-    token =
+    _token =
       qs
       |> Enum.find(fn {k, _} -> k == "token" end)
       |> case do
@@ -28,7 +29,7 @@ defmodule FlashSyncE.WebSocket.Handler do
         _ -> nil
       end
 
-    device_id =
+    _device_id =
       qs
       |> Enum.find(fn {k, _} -> k == "device_id" end)
       |> case do
@@ -43,7 +44,7 @@ defmodule FlashSyncE.WebSocket.Handler do
 
     Logger.info("User token received")
 
-    {:cowboy_websocket, req, %State{user_id: token, device_id: device_id}, opts}
+    {:cowboy_websocket, req, %State{user_id: "token", device_id: "device_id"}, opts}
   end
 
   # Called on WebSocket connection established
@@ -65,6 +66,7 @@ defmodule FlashSyncE.WebSocket.Handler do
         handle_message(decoded, state)
 
       {:error, _reason} ->
+        Logger.error("Received invalid JSON message, #{message}")
         {:reply, {:text, Jason.encode!(%{error: "Invalid JSON"})}, state}
     end
   end
@@ -87,25 +89,43 @@ defmodule FlashSyncE.WebSocket.Handler do
     {:ok, state}
   end
 
-  # FIXME: instead of hardcoded results call function which handles work with sync data
   defp handle_message(%{"type" => "sync_changes", "data" => data}, state) do
+    Logger.info("Received sync_changes message")
+    results = FlashSyncE.SyncEngine.process_changes(data, state.user_id)
+
     {:reply,
      {:text,
       Jason.encode!(%{
         type: "sync_response",
         status: "success",
         results: %{
-          successful: [Enum.at(data, 0)],
-          conflicts: []
+          successful:
+            results
+            |> Enum.filter(fn
+              {:ok, _} -> true
+              _ -> false
+            end)
+            |> Enum.map(fn {:ok, card} -> map_dto_to_card(card) end),
+          conflicts:
+            results
+            |> Enum.filter(fn
+              {:ok, _} -> false
+              _ -> true
+            end)
+            |> Enum.map(fn x ->
+              Logger.debug("Conflict detected: #{inspect(x)}")
+            end)
         }
       })}, state}
   end
 
   defp handle_message(%{"type" => "ping"}, state) do
+    Logger.info("Received ping")
     {:reply, {:text, Jason.encode!(%{type: "pong"})}, state}
   end
 
   defp handle_message(%{"type" => unknown_type}, state) do
+    Logger.error("Unknown message type: #{unknown_type}")
     {:reply, {:text, Jason.encode!(%{error: "Unknown message type: #{unknown_type}"})}, state}
   end
 
@@ -114,5 +134,19 @@ defmodule FlashSyncE.WebSocket.Handler do
   def terminate(_reason, _req, state) do
     Logger.info("WebSocket connection closed for user #{state.user_id}")
     :ok
+  end
+
+  defp map_dto_to_card(card) do
+    %{
+      id: card.id,
+      text: card.text,
+      translation: card.translation,
+      examples: card.examples,
+      version: card.version,
+      is_deleted: card.is_deleted,
+      created_at: card.created_at,
+      updated_at: card.updated_at,
+      last_synced_at: card.last_synced_at
+    }
   end
 end
